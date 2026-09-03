@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Papa from "papaparse";
+import { normalizeImportRow, cellToText } from "@/lib/importUtils";
 
 export default function ImportarPage() {
   const [fileName, setFileName] = useState("");
@@ -33,14 +34,15 @@ export default function ImportarPage() {
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(buf);
         const ws = wb.worksheets[0];
-        const headerRow = ws.getRow(1).values.slice(1).map((h) => String(h || "").trim());
+        const headerRow = ws.getRow(1).values.slice(1).map((h) => cellToText(h).trim());
         const data = [];
         ws.eachRow((row, rowNumber) => {
           if (rowNumber === 1) return;
           const values = row.values.slice(1);
           const obj = {};
-          headerRow.forEach((h, i) => (obj[h] = values[i] != null ? String(values[i]) : ""));
-          data.push(obj);
+          headerRow.forEach((h, i) => (obj[h] = cellToText(values[i])));
+          // Ignorar filas totalmente vacías (celdas en blanco al final del archivo)
+          if (Object.values(obj).some((v) => String(v).trim() !== "")) data.push(obj);
         });
         setRows(data);
       }
@@ -49,17 +51,26 @@ export default function ImportarPage() {
     }
   }
 
+  function handleDownloadTemplate() {
+    const headers = ["Nombre completo", "Número de identificación", "Teléfono", "Turno", "Punto de recogida"];
+    const ejemplo = ["Juan Pérez Gómez", "100000001", "3000000001", "Turno A", "Punto 1"];
+    const csv = "﻿" + [headers, ejemplo].map((r) => r.map((v) => `"${v}"`).join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "plantilla_pasajeros.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function handleImport() {
     setLoading(true);
     setResult(null);
     try {
-      const normalized = rows.map((r) => ({
-        nombre_completo: r["Nombre completo"] || r.nombre_completo || r.Nombre || "",
-        numero_identificacion: r["Número de identificación"] || r.numero_identificacion || r.Identificacion || "",
-        telefono: r["Teléfono"] || r.telefono || r.Telefono || "",
-        turno: r["Turno"] || r.turno || "",
-        punto_recogida: r["Punto de recogida"] || r.punto_recogida || r["Punto de Recogida"] || "",
-      }));
+      const normalized = rows.map((r) => normalizeImportRow(r));
 
       const res = await fetch("/api/passengers/import", {
         method: "POST",
@@ -83,9 +94,18 @@ export default function ImportarPage() {
       </Link>
 
       <h1 className="font-display text-2xl font-extrabold text-sand-900 tracking-tight mt-3">Importar pasajeros</h1>
-      <p className="text-sand-900/50 text-sm mt-1 mb-6">
+      <p className="text-sand-900/50 text-sm mt-1 mb-1">
         Carga un archivo Excel (.xlsx) o CSV con las columnas: Nombre completo, Número de identificación,
         Teléfono, Turno, Punto de recogida.
+      </p>
+      <p className="text-sand-900/40 text-xs mb-6">
+        No importa si escribes los encabezados con mayúsculas, sin tildes, o usas variantes como
+        &quot;Cédula&quot; en vez de &quot;Número de identificación&quot; — el sistema los reconoce igual.
+        Si tienes dudas,{" "}
+        <button type="button" onClick={handleDownloadTemplate} className="text-brand-700 underline font-medium">
+          descarga la plantilla de ejemplo
+        </button>
+        .
       </p>
 
       <div className="card p-6">
@@ -112,15 +132,18 @@ export default function ImportarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, 5).map((r, i) => (
-                    <tr key={i} className="border-t border-sand-100">
-                      <td className="px-3 py-2">{r["Nombre completo"] || r.nombre_completo}</td>
-                      <td className="px-3 py-2">{r["Número de identificación"] || r.numero_identificacion}</td>
-                      <td className="px-3 py-2">{r["Teléfono"] || r.telefono}</td>
-                      <td className="px-3 py-2">{r["Turno"] || r.turno}</td>
-                      <td className="px-3 py-2">{r["Punto de recogida"] || r.punto_recogida}</td>
-                    </tr>
-                  ))}
+                  {rows.slice(0, 5).map((r, i) => {
+                    const n = normalizeImportRow(r);
+                    return (
+                      <tr key={i} className="border-t border-sand-100">
+                        <td className="px-3 py-2">{n.nombre_completo || <span className="text-rose-500">—</span>}</td>
+                        <td className="px-3 py-2">{n.numero_identificacion || <span className="text-rose-500">—</span>}</td>
+                        <td className="px-3 py-2">{n.telefono || "—"}</td>
+                        <td className="px-3 py-2">{n.turno || <span className="text-rose-500">—</span>}</td>
+                        <td className="px-3 py-2">{n.punto_recogida || <span className="text-rose-500">—</span>}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
