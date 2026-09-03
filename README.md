@@ -299,4 +299,4 @@ El proyecto usa Next.js 14.2.35 (la versión estable más reciente de la rama
 dominios remotos, i18n, Server Actions complejas). Es buena práctica que
 quien administre el repositorio ejecute `npm audit` y actualice dependencias
 periódicamente (`npm outdated`, y evaluar el salto a Next.js 15/16 más
-adelante) como parte del mantenimiento normal de cualquier aplicación web.
+adelante) como parte del mantenimiento normal de cualquier aplicación web. 
