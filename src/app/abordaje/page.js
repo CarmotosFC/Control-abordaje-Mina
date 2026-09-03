@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Scanner from "@/components/Scanner";
 import { maskId, formatDateTime } from "@/lib/utils";
+import { playScanFeedback } from "@/lib/scanFeedback";
 import {
   genScanId,
   getQueue,
@@ -13,13 +14,21 @@ import {
   lookupLocal,
 } from "@/lib/offline";
 
-const AUTO_RETURN_MS = 4500;
+// Cuánto se queda el resultado en pantalla antes de volver a escanear
+// automáticamente (escaneo continuo — pensado para una tablet fija donde
+// suben pasajeros uno tras otro). Los casos que sí permiten abordar pasan
+// rápido para no frenar la fila; los que lo deniegan se quedan un poco más
+// para que el operador los note.
+const AUTO_RETURN_MS = { AUTORIZADO: 2500, DEFAULT: 4500 };
+function autoReturnDelay(resultado) {
+  return AUTO_RETURN_MS[resultado] ?? AUTO_RETURN_MS.DEFAULT;
+}
 
 const SCREENS = {
   AUTORIZADO: {
     tone: "bg-brand-600",
     emoji: "🟢",
-    title: "PASAJERO AUTORIZADO",
+    title: "¡ADELANTE!",
     footer: "✓ ABORDAJE PERMITIDO",
   },
   NO_AUTORIZADO: {
@@ -38,7 +47,7 @@ const SCREENS = {
     tone: "bg-orange-500",
     emoji: "🟠",
     title: "PASAJERO YA REGISTRADO",
-    footer: "Este pasajero ya fue registrado previamente hoy.",
+    footer: "Este código ya se registró hace menos de 2 horas.",
   },
   PENDIENTE: {
     tone: "bg-slate-600",
@@ -118,12 +127,21 @@ export default function AbordajePage() {
     setPendingCount(getQueue().length);
   }
 
-  function scheduleReturn() {
+  // Escaneo continuo: tras mostrar el resultado, vuelve sola a la cámara
+  // (sin que el operador tenga que tocar la pantalla) para el siguiente
+  // pasajero. `pausar()` cancela ese regreso automático.
+  function scheduleReturn(resultado) {
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      setMode("idle");
       setResult(null);
-    }, AUTO_RETURN_MS);
+      setMode("scanning");
+    }, autoReturnDelay(resultado));
+  }
+
+  function pausar() {
+    clearTimeout(timerRef.current);
+    setMode("idle");
+    setResult(null);
   }
 
   const handleDecode = useCallback(async (codigo) => {
@@ -144,25 +162,30 @@ export default function AbordajePage() {
 
       setResult({ resultado: json.resultado, data: json, deviceScanId, offline: false });
       setMode("result");
-      scheduleReturn();
+      playScanFeedback(json.resultado);
+      scheduleReturn(json.resultado);
     } catch (err) {
       // Sin conexión (o timeout): validar contra la caché local y encolar
       const local = lookupLocal(codigo);
       pushToQueue({ codigo, device_scan_id: deviceScanId, ts: Date.now() });
       setPendingCount(getQueue().length);
 
+      let resultadoOffline;
       if (local) {
+        resultadoOffline = local.estado === "ACTIVO" ? "AUTORIZADO" : "NO_AUTORIZADO";
         setResult({
-          resultado: local.estado === "ACTIVO" ? "AUTORIZADO" : "NO_AUTORIZADO",
+          resultado: resultadoOffline,
           data: { passenger: local },
           deviceScanId,
           offline: true,
         });
       } else {
-        setResult({ resultado: "PENDIENTE", data: { codigo }, deviceScanId, offline: true, sinCache: true });
+        resultadoOffline = "PENDIENTE";
+        setResult({ resultado: resultadoOffline, data: { codigo }, deviceScanId, offline: true, sinCache: true });
       }
       setMode("result");
-      scheduleReturn();
+      playScanFeedback(resultadoOffline);
+      scheduleReturn(resultadoOffline);
     }
   }, []);
 
@@ -178,7 +201,8 @@ export default function AbordajePage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
       setResult({ resultado: json.resultado, data: json, offline: false });
-      scheduleReturn();
+      playScanFeedback(json.resultado);
+      scheduleReturn(json.resultado);
     } catch (err) {
       alert(err.message);
     }
@@ -229,21 +253,16 @@ export default function AbordajePage() {
           <p className="text-xs text-white/60 mt-2">Validado con datos locales · pendiente de confirmar en línea</p>
         )}
 
-        <div className="mt-8 flex flex-col gap-3 w-full max-w-xs">
+        <p className="mt-6 text-xs text-white/50">Volviendo a escanear automáticamente…</p>
+
+        <div className="mt-4 flex flex-col gap-3 w-full max-w-xs">
           {isYaRegistrado && profile?.role === "ADMINISTRADOR" && !result.offline && (
             <button onClick={handleForzar} className="btn bg-white text-orange-700 h-12 font-bold">
               Permitir de todas formas
             </button>
           )}
-          <button
-            onClick={() => {
-              clearTimeout(timerRef.current);
-              setMode("idle");
-              setResult(null);
-            }}
-            className="btn bg-white/15 text-white h-12 font-semibold hover:bg-white/25"
-          >
-            Escanear siguiente
+          <button onClick={pausar} className="btn bg-white/15 text-white h-12 font-semibold hover:bg-white/25">
+            ⏸ Pausar
           </button>
         </div>
       </div>
