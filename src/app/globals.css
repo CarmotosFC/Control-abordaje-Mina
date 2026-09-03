@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: #f7f6f2;
+  color: #1a1f1c;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid #2c9663;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed select-none;
+}
+.btn-primary {
+  @apply btn bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800;
+}
+.btn-secondary {
+  @apply btn bg-white text-sand-900 border border-sand-200 hover:bg-sand-50;
+}
+.btn-danger {
+  @apply btn bg-rose-600 text-white hover:bg-rose-700;
+}
+.btn-ghost {
+  @apply btn text-sand-900 hover:bg-sand-100;
+}
+.input {
+  @apply w-full rounded-lg border border-sand-200 bg-white px-3 py-2 text-[15px] text-sand-900 placeholder:text-sand-900/40 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none;
+}
+.label {
+  @apply text-[13px] font-medium text-sand-900/70 mb-1 block;
+}
+.card {
+  @apply rounded-2xl border border-sand-200/70 bg-white shadow-card;
+}
+
+@media print {
+  aside, .no-print, header {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  body {
+    background: white !important;
+  }
+  .print-area {
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
