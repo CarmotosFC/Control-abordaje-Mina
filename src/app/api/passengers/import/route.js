@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 import { validatePassenger } from "../route";
+import { normalizeImportRow } from "@/lib/importUtils";
 
 // POST /api/passengers/import { rows: [{nombre_completo, numero_identificacion, telefono, turno, punto_recogida}] }
 export async function POST(request) {
@@ -31,13 +32,16 @@ export async function POST(request) {
 
   rows.forEach((raw, idx) => {
     const fila = idx + 2; // fila 1 = encabezado
-    const nombre_completo = (raw.nombre_completo || raw["Nombre completo"] || raw.Nombre || "").toString().trim();
-    const numero_identificacion = (raw.numero_identificacion || raw["Número de identificación"] || raw.Identificacion || raw.identificacion || "")
-      .toString()
-      .trim();
-    const telefono = (raw.telefono || raw["Teléfono"] || raw.Telefono || "").toString().trim();
-    const turno = (raw.turno || raw["Turno"] || "").toString().trim();
-    const punto_recogida = (raw.punto_recogida || raw["Punto de recogida"] || raw["Punto de Recogida"] || "").toString().trim();
+    // Acepta tanto las claves canónicas (nombre_completo, ...) que ya manda
+    // el frontend, como encabezados originales en español con variaciones
+    // de tildes/mayúsculas (por si se llama a este endpoint directamente).
+    const alreadyCanonical = raw.nombre_completo != null || raw.numero_identificacion != null;
+    const normalized = alreadyCanonical ? raw : normalizeImportRow(raw);
+    const nombre_completo = (normalized.nombre_completo || "").toString().trim();
+    const numero_identificacion = (normalized.numero_identificacion || "").toString().trim();
+    const telefono = (normalized.telefono || "").toString().trim();
+    const turno = (normalized.turno || "").toString().trim();
+    const punto_recogida = (normalized.punto_recogida || "").toString().trim();
 
     const errors = validatePassenger({ nombre_completo, numero_identificacion, turno, punto_recogida });
 
